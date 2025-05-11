@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmic Flow Fields</title>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.8.0/lib/p5.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #0a0a1a;
+            font-family: 'Arial', sans-serif;
+       
+  frameRate(60); }
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(10, 10, 30, 0.7);
+            padding: 15px;
+            border-radius: 10px;
+            color: white;
+            max-width: 250px;
+            backdrop-filter: blur(5px);
+        }
+        .control-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
+        button {
+            background: #3a3a5a;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            margin-right: 5px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        button:hover {
+            background: #4a4a6a;
+        }
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+
+<base target="_self">
+
+
+    <div id="canvas-container"></div>
+    <div id="controls">
+        <div class="control-group">
+            <label for="particleCount">Particle Count: <span id="particleCountValue">500</span></label>
+            <input type="range" id="particleCount" min="100" max="2000" value="500" step="100">
+        </div>
+        <div class="control-group">
+            <label for="flowStrength">Flow Strength: <span id="flowStrengthValue">0.5</span></label>
+            <input type="range" id="flowStrength" min="0" max="1" value="0.5" step="0.01">
+        </div>
+        <div class="control-group">
+            <label for="speed">Speed: <span id="speedValue">1</span></label>
+            <input type="range" id="speed" min="0.1" max="3" value="1" step="0.1">
+        </div>
+        <div class="control-group">
+            <label for="colorTheme">Color Theme:</label>
+            <div>
+                <button id="themeNebula">Nebula</button>
+                <button id="themeOcean">Ocean</button>
+                <button id="themeAurora">Aurora</button>
+            </div>
+        </div>
+        <div class="control-group">
+            <label for="opacity">Opacity: <span id="opacityValue">50</span>%</label>
+            <input type="range" id="opacity" min="10" max="100" value="50">
+        </div>
+        <div class="control-group">
+            <button id="randomize">Randomize</button>
+            <button id="reset">Reset</button>
+        </div>
+    </div>
+
+    <script>
+        const sketch = (p) => {
+            let particles = [];
+            let flowField = [];
+            let cols, rows;
+            let resolution = 20;
+            let zoff = 0;
+            let theme = 'nebula';
+            let particleCount = 500;
+            let flowStrength = 0.5;
+            let speed = 1;
+            let opacity = 50;
+            let colorPalettes = {
+                nebula: [
+                    [138, 43, 226], // BlueViolet
+                    [75, 0, 130],   // Indigo
+                    [0, 191, 255],   // DeepSkyBlue
+                    [147, 112, 219], // MediumPurple
+                    [123, 104, 238]  // MediumSlateBlue
+                ],
+                ocean: [
+                    [0, 105, 148],   // DeepSeaBlue
+                    [0, 139, 139],   // DarkCyan
+                    [64, 224, 208],  // Turquoise
+                    [0, 206, 209],   // DarkTurquoise
+                    [72, 209, 204]   // MediumTurquoise
+                ],
+                aurora: [
+                    [0, 255, 127],   // SpringGreen
+                    [0, 250, 154],   // MediumSpringGreen
+                    [32, 178, 170],   // LightSeaGreen
+                    [72, 61, 139],    // DarkSlateBlue
+                    [106, 90, 205]    // SlateBlue
+                ]
+            };
+
+            p.setup = () => {
+                let canvas = p.createCanvas(p.windowWidth, p.windowHeight);
+                canvas.parent('canvas-container');
+                p.colorMode(p.RGB, 255, 255, 255, 1);
+                p.noStroke();
+                
+                cols = Math.floor(p.width / resolution);
+                rows = Math.floor(p.height / resolution);
+                flowField = new Array(cols * rows);
+                
+                initParticles();
+                setupControls();
+            };
+
+            p.draw = () => {
+                p.background(10, 10, 30, 0.05);
+                
+                updateFlowField();
+                updateParticles();
+            };
+
+            p.windowResized = () => {
+                p.resizeCanvas(p.windowWidth, p.windowHeight);
+                cols = Math.floor(p.width / resolution);
+                rows = Math.floor(p.height / resolution);
+                flowField = new Array(cols * rows);
+                
+                // Reinitialize particles to match new canvas size
+                initParticles();
+            };
+
+            function initParticles() {
+                particles = [];
+                for (let i = 0; i < particleCount; i++) {
+                    particles.push(new Particle());
+                }
+            }
+
+            function updateFlowField() {
+                let yoff = 0;
+                for (let y = 0; y < rows; y++) {
+                    let xoff = 0;
+                    for (let x = 0; x < cols; x++) {
+                        let index = x + y * cols;
+                        let angle = p.noise(xoff, yoff, zoff) * p.TWO_PI * 4;
+                        let v = p5.Vector.fromAngle(angle);
+                        v.setMag(flowStrength);
+                        flowField[index] = v;
+                        xoff += 0.1;
+                    }
+                    yoff += 0.1;
+                    zoff += 0.0003 * speed;
+                }
+            }
+
+            function updateParticles() {
+                for (let particle of particles) {
+                    particle.follow(flowField);
+                    particle.update();
+                    particle.show();
+                    particle.edges();
+                }
+            }
+
+            class Particle {
+                constructor() {
+                    this.pos = p.createVector(p.random(p.width), p.random(p.height));
+                    this.vel = p.createVector(0, 0);
+                    this.acc = p.createVector(0, 0);
+                    this.maxspeed = 2 * speed;
+                    this.prevPos = this.pos.copy();
+                    this.color = p.random(colorPalettes[theme]);
+                    this.life = p.random(100, 200);
+                    this.age = 0;
+                    this.size = p.random(1, 3);
+                }
+
+                follow(vectors) {
+                    let x = Math.floor(this.pos.x / resolution);
+                    let y = Math.floor(this.pos.y / resolution);
+                    let index = x + y * cols;
+                    if (index >= 0 && index < vectors.length) {
+                        let force = vectors[index];
+                        this.applyForce(force);
+                    }
+                }
+
+                applyForce(force) {
+                    this.acc.add(force);
+                }
+
+                update() {
+                    this.vel.add(this.acc);
+                    this.vel.limit(this.maxspeed);
+                    this.pos.add(this.vel);
+                    this.acc.mult(0);
+                    this.age++;
+                    
+                    // Reset particle if it's too old
+                    if (this.age > this.life) {
+                        this.reset();
+                    }
+                }
+
+                reset() {
+                    this.pos = p.createVector(p.random(p.width), p.random(p.height));
+                    this.prevPos = this.pos.copy();
+                    this.vel.mult(0);
+                    this.acc.mult(0);
+                    this.age = 0;
+                    this.color = p.random(colorPalettes[theme]);
+                }
+
+                show() {
+                    let alpha = opacity / 100;
+                    p.stroke(this.color[0], this.color[1], this.color[2], alpha);
+                    p.strokeWeight(this.size);
+                    p.line(this.pos.x, this.pos.y, this.prevPos.x, this.prevPos.y);
+                    this.updatePrev();
+                }
+
+                updatePrev() {
+                    this.prevPos.x = this.pos.x;
+                    this.prevPos.y = this.pos.y;
+                }
+
+                edges() {
+                    if (this.pos.x > p.width) {
+                        this.pos.x = 0;
+                        this.updatePrev();
+                    }
+                    if (this.pos.x < 0) {
+                        this.pos.x = p.width;
+                        this.updatePrev();
+                    }
+                    if (this.pos.y > p.height) {
+                        this.pos.y = 0;
+                        this.updatePrev();
+                    }
+                    if (this.pos.y < 0) {
+                        this.pos.y = p.height;
+                        this.updatePrev();
+                    }
+                }
+            }
+
+            function setupControls() {
+                // Particle Count
+                const particleCountSlider = document.getElementById('particleCount');
+                const particleCountValue = document.getElementById('particleCountValue');
+                particleCountSlider.addEventListener('input', function() {
+                    particleCount = parseInt(this.value);
+                    particleCountValue.textContent = particleCount;
+                    initParticles();
+                });
+
+                // Flow Strength
+                const flowStrengthSlider = document.getElementById('flowStrength');
+                const flowStrengthValue = document.getElementById('flowStrengthValue');
+                flowStrengthSlider.addEventListener('input', function() {
+                    flowStrength = parseFloat(this.value);
+                    flowStrengthValue.textContent = flowStrength.toFixed(2);
+                });
+
+                // Speed
+                const speedSlider = document.getElementById('speed');
+                const speedValue = document.getElementById('speedValue');
+                speedSlider.addEventListener('input', function() {
+                    speed = parseFloat(this.value);
+                    speedValue.textContent = speed.toFixed(1);
+                });
+
+                // Opacity
+                const opacitySlider = document.getElementById('opacity');
+                const opacityValue = document.getElementById('opacityValue');
+                opacitySlider.addEventListener('input', function() {
+                    opacity = parseInt(this.value);
+                    opacityValue.textContent = opacity;
+                });
+
+                // Color Themes
+                document.getElementById('themeNebula').addEventListener('click', function() {
+                    theme = 'nebula';
+                    updateParticleColors();
+                });
+                document.getElementById('themeOcean').addEventListener('click', function() {
+                    theme = 'ocean';
+                    updateParticleColors();
+                });
+                document.getElementById('themeAurora').addEventListener('click', function() {
+                    theme = 'aurora';
+                    updateParticleColors();
+                });
+
+                // Randomize
+                document.getElementById('randomize').addEventListener('click', function() {
+                    particleCount = p.random(100, 2000);
+                    flowStrength = p.random(0.1, 1);
+                    speed = p.random(0.5, 3);
+                    opacity = p.random(20, 100);
+                    theme = p.random(['nebula', 'ocean', 'aurora']);
+                    
+                    particleCountSlider.value = particleCount;
+                    particleCountValue.textContent = particleCount;
+                    flowStrengthSlider.value = flowStrength;
+                    flowStrengthValue.textContent = flowStrength.toFixed(2);
+                    speedSlider.value = speed;
+                    speedValue.textContent = speed.toFixed(1);
+                    opacitySlider.value = opacity;
+                    opacityValue.textContent = opacity;
+                    
+                    initParticles();
+                });
+
+                // Reset
+                document.getElementById('reset').addEventListener('click', function() {
+                    particleCount = 500;
+                    flowStrength = 0.5;
+                    speed = 1;
+                    opacity = 50;
+                    theme = 'nebula';
+                    
+                    particleCountSlider.value = particleCount;
+                    particleCountValue.textContent = particleCount;
+                    flowStrengthSlider.value = flowStrength;
+                    flowStrengthValue.textContent = flowStrength.toFixed(2);
+                    speedSlider.value = speed;
+                    speedValue.textContent = speed.toFixed(1);
+                    opacitySlider.value = opacity;
+                    opacityValue.textContent = opacity;
+                    
+                    initParticles();
+                });
+            }
+
+            function updateParticleColors() {
+                for (let particle of particles) {
+                    particle.color = p.random(colorPalettes[theme]);
+                }
+            }
+        };
+
+        new p5(sketch);
+    </script>
+
+              
+          
+                
+          
+              
